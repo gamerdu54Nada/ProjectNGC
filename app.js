@@ -12,9 +12,12 @@ createApp({
             // Authentication
             isLoggedIn: false,
             currentUser: null,
+            adminMode: false,
             loginForm: {
                 username: '',
-                password: ''
+                password: '',
+                isAdmin: false,
+                adminCode: ''
             },
             loginError: '',
             
@@ -54,7 +57,25 @@ createApp({
             // Backup/Recovery
             showBackupManager: false,
             backupList: [],
-            showStorageStats: false
+            showStorageStats: false,
+            
+            // Admin panel
+            adminPanel: {
+                users: [],
+                allScripts: [],
+                allChats: [],
+                currentTab: 'users'
+            },
+            
+            // Chat system
+            chatPanel: {
+                conversations: [],
+                selectedConversation: null,
+                messages: [],
+                newMessageText: '',
+                searchedUsers: [],
+                searchUsername: ''
+            }
         };
     },
 
@@ -69,8 +90,46 @@ createApp({
         async login() {
             this.loginError = '';
             const username = this.loginForm.username.trim();
+            const isAdmin = this.loginForm.isAdmin;
+            
+            if (!username) { 
+                this.loginError = 'Voer gebruikersnaam in'; 
+                return; 
+            }
+
+            // Admin login path
+            if (isAdmin) {
+                const adminCode = this.loginForm.adminCode.trim();
+                if (!adminCode) { 
+                    this.loginError = 'Voer admin code in'; 
+                    return; 
+                }
+                
+                // Verify admin code
+                if (adminCode !== 'NGCprojecttest1') {
+                    this.loginError = 'Ongeldige admin code';
+                    return;
+                }
+                
+                // Admin login successful
+                this.currentUser = username;
+                this.isLoggedIn = true;
+                this.adminMode = true;
+                localStorage.setItem('connectedUser', username);
+                this.storage = new StorageService(username);
+                this.loadUserProject();
+                this.loadAdminPanel();
+                this.loadAdminChats();
+                this.addLog(`👑 Admin Welkom ${username}! Je bent ingelogd als admin.`, 'success');
+                return;
+            }
+
+            // Normal user login path
             const password = this.loginForm.password;
-            if (!username || !password) { this.loginError = 'Voer gebruikersnaam en wachtwoord in'; return; }
+            if (!password) { 
+                this.loginError = 'Voer wachtwoord in'; 
+                return; 
+            }
 
             try {
                 const result = await StorageService.verifyAccount(username, password);
@@ -88,9 +147,9 @@ createApp({
             this.isLoggedIn = true;
             localStorage.setItem('connectedUser', username);
             this.storage = new StorageService(username);
-            this.storage.enableAutoSave(() => { this.saveUserProject(); });
             this.loadUserProject();
-            this.addLog(`👋 Welkom ${username}! Je bent ingelogd. Auto-save is actief.`, 'success');
+            this.loadConversations();
+            this.addLog(`👋 Welkom ${username}! Je bent ingelogd.`, 'success');
         },
 
         async register() {
@@ -115,7 +174,8 @@ createApp({
                 this.registerError = 'Fout bij registratie';
             }
         },
-        
+
+
         logout() {
             if (confirm('Wil je echt uitloggen?')) {
                 // Save current project before logout
@@ -124,12 +184,15 @@ createApp({
                 // Clear session
                 localStorage.removeItem('connectedUser');
                 this.isLoggedIn = false;
+                this.adminMode = false;
                 this.currentUser = null;
                 
                 // Clear form
                 this.loginForm = {
                     username: '',
-                    password: ''
+                    password: '',
+                    isAdmin: false,
+                    adminCode: ''
                 };
                 this.loginError = '';
                 
@@ -177,9 +240,6 @@ createApp({
         saveUserProject() {
             if (!this.storage) return false;
             
-            // Save current item first
-            this.saveCurrentItem();
-            
             const project = {
                 pages: this.pageData,
                 scripts: this.scripts
@@ -189,7 +249,6 @@ createApp({
             this.storage.saveProject(project).then(success => {
                 if (success) {
                     this.lastSavedTime = new Date().toISOString();
-                    this.unsavedChanges = false;
                     
                     // Update storage stats
                     this.updateStorageStats();
@@ -293,11 +352,10 @@ end`;
                 this.scripts[this.selectedItem.name] = this.currentScriptCode;
             }
             
-            // Mark changes and trigger auto-save
-            if (this.storage) {
-                this.storage.markChanged();
-                this.unsavedChanges = true;
-            }
+            // Save to storage and mark as saved
+            this.saveUserProject();
+            this.unsavedChanges = false;
+            this.addLog('✅ Opgeslagen!', 'success');
         },
 
         addNewPage() {
@@ -892,7 +950,106 @@ end`;
             } else {
                 this.addLog('Geen oude backups om te verwijderen', 'info');
             }
-
+        },
+        
+        // ============ ADMIN FUNCTIONS ============
+        async loadAdminPanel() {
+            try {
+                // Load all users
+                this.adminPanel.users = await StorageService.getAllAccounts();
+                
+                // Load all projects and extract scripts
+                const allProjects = await StorageService.getAllProjects();
+                this.adminPanel.allScripts = [];
+                
+                allProjects.forEach(proj => {
+                    const username = proj.username;
+                    const scripts = proj.data.scripts || {};
+                    Object.entries(scripts).forEach(([scriptName, scriptCode]) => {
+                        this.adminPanel.allScripts.push({
+                            username,
+                            scriptName,
+                            code: scriptCode
+                        });
+                    });
+                });
+                
+                this.addLog(`📊 Admin Panel geladen: ${this.adminPanel.users.length} users, ${this.adminPanel.allScripts.length} scripts`, 'info');
+            } catch (e) {
+                this.addLog(`❌ Fout bij laden admin panel: ${e.message}`, 'error');
+            }
+        },
+        
+        // ============ CHAT FUNCTIONS ============
+        async loadConversations() {
+            if (!this.storage) return;
+            try {
+                this.chatPanel.conversations = await this.storage.getConversations();
+            } catch (e) {
+                console.error('Fout bij laden conversations:', e);
+            }
+        },
+        
+        async searchUsersForChat() {
+            const searchTerm = this.chatPanel.searchUsername.trim().toLowerCase();
+            if (!searchTerm) {
+                this.chatPanel.searchedUsers = [];
+                return;
+            }
+            
+            try {
+                const allUsers = await StorageService.getAllAccounts();
+                this.chatPanel.searchedUsers = allUsers
+                    .filter(u => u.username.toLowerCase().includes(searchTerm) && u.username !== this.currentUser)
+                    .slice(0, 5);
+            } catch (e) {
+                console.error('Fout bij zoeken users:', e);
+            }
+        },
+        
+        async selectConversation(otherUser) {
+            this.chatPanel.selectedConversation = otherUser;
+            this.chatPanel.searchUsername = '';
+            this.chatPanel.searchedUsers = [];
+            await this.loadMessages();
+        },
+        
+        async loadMessages() {
+            if (!this.storage || !this.chatPanel.selectedConversation) return;
+            try {
+                this.chatPanel.messages = await this.storage.getMessages(this.chatPanel.selectedConversation);
+            } catch (e) {
+                console.error('Fout bij laden berichten:', e);
+            }
+        },
+        
+        async sendMessage() {
+            const text = this.chatPanel.newMessageText.trim();
+            if (!text || !this.chatPanel.selectedConversation) return;
+            
+            if (this.storage) {
+                await this.storage.saveMessage(this.chatPanel.selectedConversation, this.currentUser, text);
+                this.chatPanel.newMessageText = '';
+                await this.loadMessages();
+                await this.loadConversations();
+                
+                // Auto-scroll to bottom
+                this.$nextTick(() => {
+                    const msgContainer = document.querySelector('.chat-messages');
+                    if (msgContainer) {
+                        msgContainer.scrollTop = msgContainer.scrollHeight;
+                    }
+                });
+            }
+        },
+        
+        async loadAdminChats() {
+            try {
+                this.adminPanel.allChats = await StorageService.getAllConversations();
+            } catch (e) {
+                console.error('Fout bij laden admin chats:', e);
+                this.adminPanel.allChats = [];
+            }
         }
     }
 }).mount('#app');
