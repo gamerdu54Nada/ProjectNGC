@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "name": "Example Explorer",
+    "version": "1.0.0",
+    "author": "dev",
+    "createdAt": "2026-02-18T10:00:00Z"
+  },
+  "pages": [
+    {
+      "name": "page 1",
+      "background": { "color": "blue" },
+      "elements": [
+        {
+          "type": "text",
+          "name": "title1",
+          "properties": { "value": "Welkom!", "position": [50, 50], "fontsize": 30, "color": "white" }
+        },
+        {
+          "type": "button",
+          "name": "btn1",
+          "properties": { "text": "Next", "position": [100, 200], "size": [150, 50], "color": "green", "corner": 10, "fontsize": 20, "script": "nextScript" }
+        }
+      ]
+    },
+    {
+      "name": "page 2",
+      "background": { "color": "black" },
+      "elements": [
+        {
+          "type": "text",
+          "name": "title2",
+          "properties": { "value": "Pagina 2", "position": [50, 50], "fontsize": 30, "color": "yellow" }
+        },
+        {
+          "type": "button",
+          "name": "btn2",
+          "properties": { "text": "Back", "position": [100, 200], "size": [150, 50], "color": "red", "corner": 10, "fontsize": 20, "script": "backScript" }
+        }
+      ]
+    }
+  ],
+  "scripts": {
+    "nextScript": {
+      "name": "nextScript",
+      "triggers": [ { "type": "click", "target": "btn1" } ],
+      "actions": [ { "type": "goto", "page": "page 2" } ]
+    },
+    "backScript": {
+      "name": "backScript",
+      "triggers": [ { "type": "click", "target": "btn2" } ],
+      "actions": [ { "type": "goto", "page": "page 1" } ]
+    }
+  },
+  "assets": {}
+}

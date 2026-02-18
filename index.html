@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectScript IDE</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="storage-service.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div v-if="!isLoggedIn" class="login-container">
+            <div class="login-box">
+                <h1>🎨 ConnectScript Studio</h1>
+                <p class="login-subtitle">Vereist inloggen</p>
+                
+                <form v-if="!registerMode" @submit.prevent="login">
+                    <div class="form-group">
+                        <label for="username">Gebruikersnaam:</label>
+                        <input 
+                            v-model="loginForm.username" 
+                            id="username"
+                            type="text" 
+                            placeholder="Voer gebruikersnaam in"
+                            class="form-input"
+                            required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Wachtwoord:</label>
+                        <input 
+                            v-model="loginForm.password" 
+                            id="password"
+                            type="password" 
+                            placeholder="Voer wachtwoord in"
+                            class="form-input"
+                            required>
+                    </div>
+                    
+                    <div v-if="loginError" class="error-message">
+                        {{ loginError }}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-login">Login</button>
+                </form>
+
+                <form v-else @submit.prevent="register">
+                    <div class="form-group">
+                        <label for="reg-username">Gebruikersnaam:</label>
+                        <input 
+                            v-model="registerForm.username" 
+                            id="reg-username"
+                            type="text" 
+                            placeholder="Kies een gebruikersnaam"
+                            class="form-input"
+                            required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-password">Wachtwoord:</label>
+                        <input 
+                            v-model="registerForm.password" 
+                            id="reg-password"
+                            type="password" 
+                            placeholder="Kies een wachtwoord (min 4 karakters)"
+                            class="form-input"
+                            required>
+                    </div>
+                    <div v-if="registerError" class="error-message">{{ registerError }}</div>
+                    <div v-if="registerSuccess" class="success-message">{{ registerSuccess }}</div>
+                    <button type="submit" class="btn btn-login">Registreer</button>
+                </form>
+
+                <div class="form-switch">
+                    <a href="#" @click.prevent="registerMode = !registerMode">{{ registerMode ? 'Terug naar inloggen' : 'Nog geen account? Registreer' }}</a>
+                </div>
+                
+                <p class="login-hint">
+                    Demo: Gebruik elk passwoord (minimaal 4 karakters)
+                </p>
+            </div>
+        </div>
+        
+        <!-- IDE (shown only when logged in) -->
+        <div v-else class="container">
+            <!-- Header -->
+            <div class="header">
+                <h1>🎨 ConnectScript Studio</h1>
+                <div class="user-info">
+                    <span class="username">👤 {{ currentUser }}</span>
+                    <button @click="logout" class="btn btn-logout">Uitloggen</button>
+                </div>
+                <div class="header-actions">
+                    <button @click="runCode" class="btn btn-run">▶ Run</button>
+                    <button @click="addNewScript" class="btn btn-add">➕ Voeg Script Toe</button>
+                    <button @click="clearAllData" class="btn btn-clear">🗑 Reset</button>
+                    <a href="#" @click.prevent="downloadProject" class="btn">💾 Download</a>
+                    <a href="#" @click.prevent="exportScriptsToHTML" class="btn">📄 Export Scripts</a>
+                    <a href="#" @click.prevent="exportPreviewToHTML" class="btn">🌐 Export Preview</a>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- Explorer (Left) -->
+                <div class="explorer-section">
+                    <div class="section-header">
+                        <h2>📂 Project</h2>
+                    </div>
+                    <div class="explorer-tree">
+                        <!-- Pages Folder -->
+                        <div class="tree-folder">
+                            <div class="tree-item" @click="togglePagesFolder">
+                                <span class="tree-icon">{{ pagesExpanded ? '▼' : '▶' }}</span>
+                                <span class="tree-label">📄 Pages</span>
+                                <button @click.stop="addNewPage" class="tree-add-btn" title="Voeg pagina toe">+</button>
+                            </div>
+                            <div v-if="pagesExpanded" class="tree-children">
+                                <div 
+                                    v-for="page in pages"
+                                    :key="page.name"
+                                    @click="selectItem('page', page.name)"
+                                    :class="['tree-item', { active: selectedItem.type === 'page' && selectedItem.name === page.name }]"
+                                    class="tree-page-item">
+                                    <span class="tree-icon">📃</span>
+                                    <span class="tree-label">{{ page.name }}</span>
+                                    <button @click.stop="deletePage(page.name)" class="tree-delete-btn">✕</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Scripts Folder -->
+                        <div class="tree-folder">
+                            <div class="tree-item" @click="toggleScriptsFolder">
+                                <span class="tree-icon">{{ scriptsExpanded ? '▼' : '▶' }}</span>
+                                <span class="tree-label">🔧 Scripts</span>
+                                <button @click.stop="addNewScript" class="tree-add-btn" title="Voeg script toe">+</button>
+                            </div>
+                            <div v-if="scriptsExpanded" class="tree-children">
+                                <div 
+                                    v-for="script in scriptList"
+                                    :key="script.name"
+                                    @click="selectItem('script', script.name)"
+                                    :class="['tree-item', { active: selectedItem.type === 'script' && selectedItem.name === script.name }]"
+                                    class="tree-script-item">
+                                    <span class="tree-icon">📜</span>
+                                    <span class="tree-label">{{ script.name }}</span>
+                                    <button @click.stop="deleteScript(script.name)" class="tree-delete-btn">✕</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Code Editor (Middle) -->
+                <div class="editor-section">
+                    <div class="section-header">
+                        <h2>{{ selectedItemLabel }}</h2>
+                        <span class="hint" v-if="selectedItem.type === 'script'">Script: {{ selectedItem.name }}</span>
+                        <span class="hint" v-else-if="selectedItem.type === 'page'">Pagina: {{ selectedItem.name }}</span>
+                        <span class="hint" v-else>Selecteer een item</span>
+                    </div>
+                    <textarea 
+                        v-if="selectedItem.type === 'script'"
+                        v-model="currentScriptCode"
+                        @keydown="handleEditorKeydown"
+                        placeholder="Schrijf je script code hier..."
+                        class="code-editor"
+                        spellcheck="false"></textarea>
+                    <textarea 
+                        v-else-if="selectedItem.type === 'page'"
+                        v-model="currentPageCode"
+                        @keydown="handleEditorKeydown"
+                        placeholder="Schrijf je pagina code hier..."
+                        class="code-editor"
+                        spellcheck="false"></textarea>
+                    <div v-else class="empty-editor">
+                        <p>👈 Klik op een item in de explorer om te beginnen</p>
+                    </div>
+                    <div class="editor-info">
+                        <span>{{ codeLines }} regels</span>
+                        <span class="error-indicator" v-if="parseError">⚠️ {{ parseError }}</span>
+                        <button @click="saveCurrentItem" class="btn-small" v-if="selectedItem.type">💾 Opslaan</button>
+                    </div>
+                </div>
+
+                <!-- Preview (Right) -->
+                <div class="preview-section">
+                    <div class="section-header">
+                        <h2>👁️ Preview</h2>
+                        <span class="hint">{{ currentPage ? 'Pagina: ' + currentPage : 'Geen pagina' }}</span>
+                    </div>
+                    <div class="preview-container">
+                        <div class="pages-nav" v-if="pages.length > 0">
+                            <button 
+                                v-for="page in pages"
+                                :key="page.name"
+                                @click="switchPage(page.name)"
+                                :class="['page-btn', { active: currentPage === page.name }]">
+                                {{ page.name }}
+                            </button>
+                        </div>
+                        <div class="canvas" v-if="currentPageData">
+                            <div 
+                                class="canvas-bg"
+                                :style="{ backgroundColor: getBackground(currentPageData) }">
+                                <!-- Render Elements -->
+                                <component 
+                                    v-for="element in currentPageData.elements"
+                                    :key="element.name"
+                                    :is="element.type === 'button' ? 'UIButton' : element.type === 'text' ? 'UIText' : 'UIImage'"
+                                    :element="element"
+                                    @element-click="handleElementClick">
+                                </component>
+                            </div>
+                        </div>
+                        <div v-else class="empty-state">
+                            <p>📄 Geen pagina's gevonden</p>
+                            <p class="hint">Voeg een pagina toe via de explorer</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Console (Bottom) -->
+            <div class="console-section">
+                <div class="console-header">
+                    <h3>📋 Console Output</h3>
+                    <button @click="clearConsole" class="btn-small">Clear</button>
+                </div>
+                <div class="console">
+                    <div v-for="(log, i) in console" :key="i" :class="['log', log.type]">
+                        {{ log.message }}
+                    </div>
+                    <div v-if="console.length === 0" class="log info">
+                        Programmauitvoer en waarschuwingen verschijnen hier...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backup Manager Dialog -->
+            <div v-if="showBackupManager" class="modal-overlay" @click="showBackupManager = false">
+                <div class="modal-dialog" @click.stop>
+                    <div class="modal-header">
+                        <h2>💾 Backup Manager</h2>
+                        <button @click="showBackupManager = false" class="modal-close">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div v-if="backupList.length === 0" class="empty-message">
+                            <p>Geen backups beschikbaar</p>
+                        </div>
+                        <div v-else class="backup-list">
+                            <div v-for="backup in backupList" :key="backup.timestamp" class="backup-item">
+                                <div class="backup-info">
+                                    <div class="backup-date">📅 {{ new Date(backup.timestamp).toLocaleString('nl-NL') }}</div>
+                                    <div class="backup-size">💾 {{ formatBytes(backup.size || JSON.stringify(backup).length) }}</div>
+                                </div>
+                                <div class="backup-actions">
+                                    <button @click="restoreFromBackup(backup.timestamp)" class="btn btn-small btn-success">↪️ Herstellen</button>
+                                    <button @click="deleteBackup(backup.timestamp)" class="btn btn-small btn-danger">🗑️ Verwijderen</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button @click="createBackupNow" class="btn btn-primary">➕ Nieuwe Backup</button>
+                        <button @click="clearOldBackups" class="btn btn-secondary">🧹 Opschonen (30+ dagen)</button>
+                        <button @click="showBackupManager = false" class="btn btn-secondary">Sluiten</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storage Stats Dialog -->
+            <div v-if="showStorageStats" class="modal-overlay" @click="closeStorageStats()">
+                <div class="modal-dialog" @click.stop>
+                    <div class="modal-header">
+                        <h2>📊 Storage Statistics</h2>
+                        <button @click="closeStorageStats()" class="modal-close">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div v-if="storageStats" class="storage-stats">
+                            <div class="stat-item">
+                                <div class="stat-label">💾 localStorage Gebruik:</div>
+                                <div class="stat-value">{{ storageStats.localStorage || 'N/A' }}</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">📦 Backups:</div>
+                                <div class="stat-value">{{ storageStats.backupCount || 0 }} backups</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">📜 History:</div>
+                                <div class="stat-value">{{ storageStats.historyCount || 0 }} entries</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">⏱️ Laatste opslag:</div>
+                                <div class="stat-value">{{ lastSavedTime ? new Date(lastSavedTime).toLocaleTimeString('nl-NL') : 'Nooit' }}</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">💾 Laatste Backup:</div>
+                                <div class="stat-value">{{ storageStats.lastBackup ? new Date(storageStats.lastBackup).toLocaleString('nl-NL') : 'Geen' }}</div>
+                            </div>
+                        </div>
+                        <div v-else class="empty-message">
+                            <p>Geen gegevens beschikbaar</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button @click="updateStorageStats" class="btn btn-primary">🔄 Vernieuwen</button>
+                        <button @click="closeStorageStats()" class="btn btn-secondary">Sluiten</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unsaved Changes Indicator -->
+            <div v-if="unsavedChanges" class="unsaved-indicator">
+                ⚠️ Niet-opgeslagen wijzigingen (auto-save...) 
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Components -->
+    <script>
+        const UIButton = {
+            props: ['element'],
+            template: `
+                <button 
+                    class="ui-button"
+                    @click="$emit('element-click', element)"
+                    :style="{
+                        position: 'absolute',
+                        left: (element.properties.position?.[0] || 10) + 'px',
+                        top: (element.properties.position?.[1] || 10) + 'px',
+                        width: (element.properties.size?.[0] || 120) + 'px',
+                        height: (element.properties.size?.[1] || 40) + 'px',
+                        backgroundColor: element.properties.color || '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: (element.properties.corner || 4) + 'px',
+                        fontSize: (element.properties.fontsize || 14) + 'px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        transition: 'transform 0.1s'
+                    }"
+                    @mousedown="e => e.target.style.transform = 'scale(0.98)'"
+                    @mouseup="e => e.target.style.transform = 'scale(1)'"
+                >
+                    {{ element.properties.text || 'Button' }}
+                </button>
+            `
+        };
+
+        const UIText = {
+            props: ['element'],
+            template: `
+                <div 
+                    class="ui-text"
+                    :style="{
+                        position: 'absolute',
+                        left: (element.properties.position?.[0] || 10) + 'px',
+                        top: (element.properties.position?.[1] || 10) + 'px',
+                        color: element.properties.color || '#000',
+                        fontSize: (element.properties.fontsize || 16) + 'px',
+                        fontFamily: 'Arial, sans-serif',
+                        userSelect: 'none'
+                    }"
+                >
+                    {{ element.properties.value || 'Text' }}
+                </div>
+            `
+        };
+
+        const UIImage = {
+            props: ['element'],
+            template: `
+                <img 
+                    class="ui-image"
+                    :src="element.properties.source || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%23ddd%22 width=%22100%22 height=%22100%22/%3E%3C/svg%3E'"
+                    :style="{
+                        position: 'absolute',
+                        left: (element.properties.position?.[0] || 10) + 'px',
+                        top: (element.properties.position?.[1] || 10) + 'px',
+                        width: (element.properties.size?.[0] || 100) + 'px',
+                        height: (element.properties.size?.[1] || 100) + 'px',
+                        objectFit: 'cover'
+                    }"
+                />
+            `
+        };
+    </script>
+
+    <script src="parser.js"></script>
+    <script src="runtime.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

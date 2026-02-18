@@ -1,0 +1,219 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConnectScript Project Schema",
+  "description": "Schema voor het project / Explorer formaat van ConnectScript",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "pages"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "createdAt"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "author": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "schema_version": { "type": "string" }
+      }
+    },
+
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/page" }
+    },
+
+    "scripts": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/script" },
+      "default": {}
+    },
+
+    "assets": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/asset" },
+      "default": {}
+    },
+
+    "settings": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+
+  "definitions": {
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "elements"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_\\- ]{1,64}$" },
+        "background": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "color": { "type": "string" },
+            "imageRef": { "type": "string" }
+          }
+        },
+        "elements": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/element" },
+          "maxItems": 500
+        }
+      }
+    },
+
+    "elementBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": { "type": "string" },
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_\\-]{1,64}$" },
+        "properties": { "type": "object" }
+      }
+    },
+
+    "element": {
+      "oneOf": [
+        { "$ref": "#/definitions/buttonElement" },
+        { "$ref": "#/definitions/textElement" },
+        { "$ref": "#/definitions/imageElement" }
+      ]
+    },
+
+    "genericElement": {
+      "allOf": [ { "$ref": "#/definitions/elementBase" } ]
+    },
+
+    "buttonElement": {
+      "allOf": [ { "$ref": "#/definitions/elementBase" }, {
+        "properties": {
+          "type": { "enum": ["button"] },
+          "properties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "position"],
+            "properties": {
+              "text": { "type": "string", "maxLength": 256 },
+              "position": { "$ref": "#/definitions/position" },
+              "size": { "$ref": "#/definitions/size" },
+              "color": { "type": "string" },
+              "fontsize": { "type": "integer", "minimum": 8, "maximum": 144 },
+              "corner": { "type": "integer", "minimum": 0, "maximum": 64 },
+              "script": { "type": "string" }
+            }
+          }
+        }
+      } ]
+    },
+
+    "textElement": {
+      "allOf": [ { "$ref": "#/definitions/elementBase" }, {
+        "properties": {
+          "type": { "enum": ["text"] },
+          "properties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "position"],
+            "properties": {
+              "value": { "type": "string" },
+              "position": { "$ref": "#/definitions/position" },
+              "fontsize": { "type": "integer", "minimum": 6 },
+              "color": { "type": "string" }
+            }
+          }
+        }
+      } ]
+    },
+
+    "imageElement": {
+      "allOf": [ { "$ref": "#/definitions/elementBase" }, {
+        "properties": {
+          "type": { "enum": ["image"] },
+          "properties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source", "position"],
+            "properties": {
+              "source": { "type": "string" },
+              "position": { "$ref": "#/definitions/position" },
+              "size": { "$ref": "#/definitions/size" }
+            }
+          }
+        }
+      } ]
+    },
+
+    "position": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2
+    },
+
+    "size": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2
+    },
+
+    "script": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "actions"],
+      "properties": {
+        "name": { "type": "string" },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string" },
+              "target": { "type": "string" }
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/action" }
+        }
+      }
+    },
+
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string" },
+        "page": { "type": "string" },
+        "message": { "type": "string" },
+        "variable": { "type": "string" },
+        "value": {},
+        "sound": { "type": "string" },
+        "seconds": { "type": "number" }
+      }
+    },
+
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "src"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["image", "sound", "other"] },
+        "src": { "type": "string" },
+        "meta": { "type": "object" }
+      }
+    }
+  }
+}
