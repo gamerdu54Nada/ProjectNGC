@@ -16,6 +16,23 @@
                 <h1>🎨 ConnectScript Studio</h1>
                 <p class="login-subtitle">Vereist inloggen</p>
                 
+                <!-- Login Mode Tabs -->
+                <div class="login-tabs">
+                    <button 
+                        type="button"
+                        @click="registerMode = false" 
+                        :class="['login-tab', { active: !registerMode }]">
+                        👤 Login
+                    </button>
+                    <button 
+                        type="button"
+                        @click="registerMode = true" 
+                        :class="['login-tab', { active: registerMode }]">
+                        📝 Registreer
+                    </button>
+                </div>
+                
+                <!-- User Login Form -->
                 <form v-if="!registerMode" @submit.prevent="login">
                     <div class="form-group">
                         <label for="username">Gebruikersnaam:</label>
@@ -29,8 +46,28 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="password">Wachtwoord:</label>
+                        <label>
+                            <input 
+                                type="checkbox" 
+                                v-model="loginForm.isAdmin">
+                            👑 Admin Mode
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label :for="loginForm.isAdmin ? 'admin-code' : 'password'">
+                            {{ loginForm.isAdmin ? 'Admin Code:' : 'Wachtwoord:' }}
+                        </label>
                         <input 
+                            v-if="loginForm.isAdmin"
+                            v-model="loginForm.adminCode" 
+                            id="admin-code"
+                            type="password" 
+                            placeholder="Voer admin code in"
+                            class="form-input"
+                            required>
+                        <input 
+                            v-else
                             v-model="loginForm.password" 
                             id="password"
                             type="password" 
@@ -43,10 +80,13 @@
                         {{ loginError }}
                     </div>
                     
-                    <button type="submit" class="btn btn-login">Login</button>
+                    <button type="submit" class="btn btn-login">
+                        {{ loginForm.isAdmin ? '👑 Admin Login' : 'Login' }}
+                    </button>
                 </form>
 
-                <form v-else @submit.prevent="register">
+                <!-- Register Form -->
+                <form v-if="registerMode" @submit.prevent="register">
                     <div class="form-group">
                         <label for="reg-username">Gebruikersnaam:</label>
                         <input 
@@ -71,14 +111,6 @@
                     <div v-if="registerSuccess" class="success-message">{{ registerSuccess }}</div>
                     <button type="submit" class="btn btn-login">Registreer</button>
                 </form>
-
-                <div class="form-switch">
-                    <a href="#" @click.prevent="registerMode = !registerMode">{{ registerMode ? 'Terug naar inloggen' : 'Nog geen account? Registreer' }}</a>
-                </div>
-                
-                <p class="login-hint">
-                    Demo: Gebruik elk passwoord (minimaal 4 karakters)
-                </p>
             </div>
         </div>
         
@@ -89,19 +121,98 @@
                 <h1>🎨 ConnectScript Studio</h1>
                 <div class="user-info">
                     <span class="username">👤 {{ currentUser }}</span>
+                    <span v-if="adminMode" class="admin-badge">👑 ADMIN</span>
                     <button @click="logout" class="btn btn-logout">Uitloggen</button>
                 </div>
                 <div class="header-actions">
-                    <button @click="runCode" class="btn btn-run">▶ Run</button>
-                    <button @click="addNewScript" class="btn btn-add">➕ Voeg Script Toe</button>
-                    <button @click="clearAllData" class="btn btn-clear">🗑 Reset</button>
-                    <a href="#" @click.prevent="downloadProject" class="btn">💾 Download</a>
-                    <a href="#" @click.prevent="exportScriptsToHTML" class="btn">📄 Export Scripts</a>
-                    <a href="#" @click.prevent="exportPreviewToHTML" class="btn">🌐 Export Preview</a>
+                    <button v-if="!adminMode" @click="runCode" class="btn btn-run">▶ Run</button>
+                    <button v-if="!adminMode" @click="addNewScript" class="btn btn-add">➕ Voeg Script Toe</button>
+                    <button v-if="!adminMode" @click="addButtonToCurrentPage" class="btn btn-add">🔘 Voeg Knop Toe</button>
+                    <button v-if="!adminMode" @click="clearAllData" class="btn btn-clear">🗑 Reset</button>
+                    <a v-if="!adminMode" href="#" @click.prevent="downloadProject" class="btn">💾 Download</a>
+                    <a v-if="!adminMode" href="#" @click.prevent="exportScriptsToHTML" class="btn">📄 Export Scripts</a>
+                    <a v-if="!adminMode" href="#" @click.prevent="exportPreviewToHTML" class="btn">🌐 Export Preview</a>
                 </div>
             </div>
 
-            <div class="main-content">
+            <!-- Admin Panel -->
+            <div v-if="adminMode" class="admin-panel">
+                <div class="admin-tabs">
+                    <button 
+                        type="button"
+                        @click="adminPanel.currentTab = 'users'" 
+                        :class="['admin-tab', { active: adminPanel.currentTab === 'users' }]">
+                        👥 Users ({{ adminPanel.users.length }})
+                    </button>
+                    <button 
+                        type="button"
+                        @click="adminPanel.currentTab = 'scripts'" 
+                        :class="['admin-tab', { active: adminPanel.currentTab === 'scripts' }]">
+                        📄 Scripts ({{ adminPanel.allScripts.length }})
+                    </button>
+                    <button 
+                        type="button"
+                        @click="adminPanel.currentTab = 'chats'" 
+                        :class="['admin-tab', { active: adminPanel.currentTab === 'chats' }]">
+                        💬 Chats ({{ adminPanel.allChats.length }})
+                    </button>
+                </div>
+                
+                <!-- Users Tab -->
+                <div v-if="adminPanel.currentTab === 'users'" class="admin-content">
+                    <h3>Alle Gebruikers</h3>
+                    <div class="admin-list">
+                        <div v-if="adminPanel.users.length === 0" class="empty-message">Geen gebruikers gevonden</div>
+                        <div v-for="user in adminPanel.users" :key="user.username" class="admin-item">
+                            <div class="admin-item-header">
+                                <strong>{{ user.username }}</strong>
+                            </div>
+                            <div class="admin-item-details">
+                                <span>Aangemaakt: {{ new Date(user.createdAt).toLocaleString('nl-NL') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Scripts Tab -->
+                <div v-if="adminPanel.currentTab === 'scripts'" class="admin-content">
+                    <h3>Alle Scripts</h3>
+                    <div class="admin-list">
+                        <div v-if="adminPanel.allScripts.length === 0" class="empty-message">Geen scripts gevonden</div>
+                        <div v-for="(script, idx) in adminPanel.allScripts" :key="idx" class="admin-script-item">
+                            <div class="admin-item-header">
+                                <strong>{{ script.scriptName }}</strong>
+                                <span class="script-user">👤 {{ script.username }}</span>
+                            </div>
+                            <div class="admin-script-code">
+                                <pre><code>{{ script.code }}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chats Tab -->
+                <div v-if="adminPanel.currentTab === 'chats'" class="admin-content">
+                    <h3>Alle Chats</h3>
+                    <div class="admin-list">
+                        <div v-if="adminPanel.allChats.length === 0" class="empty-message">Geen chats gefound</div>
+                        <div v-for="(chat, idx) in adminPanel.allChats" :key="idx" class="admin-chat-item">
+                            <div class="admin-item-header">
+                                <strong>💬 {{ chat.participants[0] }} ↔ {{ chat.participants[1] }}</strong>
+                                <span class="script-user">{{ chat.messageCount }} berichten</span>
+                            </div>
+                            <div class="admin-chat-messages">
+                                <div v-for="(msg, midx) in chat.messages.slice(-5)" :key="midx" class="admin-msg">
+                                    <strong>{{ msg.sender }}:</strong> {{ msg.text.substring(0, 50) }}...
+                                    <span class="msg-time">{{ new Date(msg.timestamp).toLocaleTimeString('nl-NL') }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div v-if="!adminMode" class="main-content">
                 <!-- Explorer (Left) -->
                 <div class="explorer-section">
                     <div class="section-header">
@@ -164,6 +275,7 @@
                         v-if="selectedItem.type === 'script'"
                         v-model="currentScriptCode"
                         @keydown="handleEditorKeydown"
+                        @input="unsavedChanges = true"
                         placeholder="Schrijf je script code hier..."
                         class="code-editor"
                         spellcheck="false"></textarea>
@@ -171,6 +283,7 @@
                         v-else-if="selectedItem.type === 'page'"
                         v-model="currentPageCode"
                         @keydown="handleEditorKeydown"
+                        @input="unsavedChanges = true"
                         placeholder="Schrijf je pagina code hier..."
                         class="code-editor"
                         spellcheck="false"></textarea>
@@ -234,6 +347,67 @@
                     </div>
                     <div v-if="console.length === 0" class="log info">
                         Programmauitvoer en waarschuwingen verschijnen hier...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Panel (Normal Users) -->
+            <div v-if="!adminMode" class="chat-panel">
+                <div class="chat-sidebar">
+                    <h3>💬 Chats</h3>
+                    <div class="chat-search">
+                        <input 
+                            v-model="chatPanel.searchUsername"
+                            @keyup="searchUsersForChat"
+                            type="text"
+                            placeholder="Zoek gebruiker..."
+                            class="chat-search-input">
+                    </div>
+                    <div v-if="chatPanel.searchedUsers.length > 0" class="search-results">
+                        <div v-for="user in chatPanel.searchedUsers" :key="user.username" 
+                            @click="selectConversation(user.username)"
+                            class="search-user-item">
+                            👤 {{ user.username }}
+                        </div>
+                    </div>
+                    <div class="conversations-list">
+                        <div v-if="chatPanel.conversations.length === 0" class="empty-message">
+                            Geen chats yet
+                        </div>
+                        <div v-for="conv in chatPanel.conversations" :key="conv.conversationId"
+                            @click="selectConversation(conv.otherUser)"
+                            :class="['conversation-item', { active: chatPanel.selectedConversation === conv.otherUser }]">
+                            <div class="conv-user">👤 {{ conv.otherUser }}</div>
+                            <div class="conv-preview">{{ conv.lastMessage.substring(0, 30) }}...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-main">
+                    <div v-if="!chatPanel.selectedConversation" class="chat-empty">
+                        <p>🔍 Selecteer of zoek een gebruiker om te chatten</p>
+                    </div>
+                    <div v-else class="chat-active">
+                        <div class="chat-header">
+                            💬 Chat met {{ chatPanel.selectedConversation }}
+                        </div>
+                        <div class="chat-messages">
+                            <div v-for="(msg, idx) in chatPanel.messages" :key="idx" 
+                                :class="['message', { own: msg.sender === currentUser }]">
+                                <div class="message-sender">{{ msg.sender }}</div>
+                                <div class="message-text">{{ msg.text }}</div>
+                                <div class="message-time">{{ new Date(msg.timestamp).toLocaleTimeString('nl-NL') }}</div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input 
+                                v-model="chatPanel.newMessageText"
+                                @keyup.enter="sendMessage"
+                                type="text"
+                                placeholder="Typ bericht..."
+                                class="chat-input">
+                            <button @click="sendMessage" class="btn-send">Verzenden</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -313,7 +487,7 @@
 
             <!-- Unsaved Changes Indicator -->
             <div v-if="unsavedChanges" class="unsaved-indicator">
-                ⚠️ Niet-opgeslagen wijzigingen (auto-save...) 
+                ⚠️ Niet-opgeslagen wijzigingen 
             </div>
         </div>
     </div>

@@ -1,0 +1,10 @@
+nohup: ignoring input
+127.0.0.1 - - [18/Feb/2026 19:44:15] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:21] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:22] "GET /styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:22] "GET /storage-service.js HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:22] "GET /parser.js HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:22] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:22] "GET /runtime.js HTTP/1.1" 200 -
+127.0.0.1 - - [18/Feb/2026 19:44:23] code 404, message File not found
+127.0.0.1 - - [18/Feb/2026 19:44:23] "GET /favicon.ico HTTP/1.1" 404 -

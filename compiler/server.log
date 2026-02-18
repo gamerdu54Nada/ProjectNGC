@@ -1,0 +1,25 @@
+
+╔====================================================================╗
+║  🚀 ConnectScript Compiler API Server                             ║
+╚====================================================================╝
+
+📡 Serveur démarré sur: http://localhost:5000/
+📍 Point de terminaison: POST http://localhost:5000/api/compile
+
+📊 Vous pouvez maintenant:
+  1. Compiler du code via POST /api/compile
+  2. Vérifier le statut via GET /api/status
+  3. Voir la version via GET /api/version
+
+💾 Exemple de requête POST:
+
+curl -X POST http://localhost:5000/api/compile \
+  -H "Content-Type: application/json" \
+  -d '{"code":"page Home\n-background\n--color blue"}'
+
+
+⌨️  Appuyez sur Ctrl+C pour arrêter le serveur...
+
+[127.0.0.1] GET /api/status
+[127.0.0.1] GET /
+[127.0.0.1] GET /

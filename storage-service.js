@@ -25,7 +25,7 @@ class StorageService {
      */
     async initDB() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('ConnectScriptDB', 2);
+            const request = indexedDB.open('ConnectScriptDB', 3);
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -43,6 +43,9 @@ class StorageService {
                 }
                 if (!db.objectStoreNames.contains('accounts')) {
                     db.createObjectStore('accounts', { keyPath: 'username' });
+                }
+                if (!db.objectStoreNames.contains('messages')) {
+                    db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
                 }
             };
         });
@@ -369,7 +372,7 @@ if (typeof module !== 'undefined' && module.exports) {
 // Uses the same IndexedDB database to store user accounts (username, salt, hash)
 StorageService.openDB = function() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('ConnectScriptDB', 2);
+        const request = indexedDB.open('ConnectScriptDB', 3);
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result);
         request.onupgradeneeded = (event) => {
@@ -377,6 +380,7 @@ StorageService.openDB = function() {
             if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'username' });
             if (!db.objectStoreNames.contains('backups')) db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
             if (!db.objectStoreNames.contains('accounts')) db.createObjectStore('accounts', { keyPath: 'username' });
+            if (!db.objectStoreNames.contains('messages')) db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
         };
     });
 };
@@ -461,4 +465,157 @@ StorageService.verifyAccount = async function(username, password) {
     let equal = true;
     for (let i = 0; i < hash.length; i++) if (hash[i] !== expectedHash[i]) { equal = false; break; }
     return equal ? { success: true } : { success: false, message: 'Ongeldig wachtwoord' };
+};
+
+// Admin functions
+StorageService.getAllAccounts = async function() {
+    const db = await StorageService.openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(['accounts'], 'readonly');
+        const store = tx.objectStore('accounts');
+        const req = store.getAll();
+        req.onsuccess = () => {
+            const accounts = req.result.map(acc => ({
+                username: acc.username,
+                createdAt: acc.createdAt
+            }));
+            resolve(accounts);
+        };
+        req.onerror = () => reject(req.error);
+    });
+};
+
+StorageService.getAllProjects = async function() {
+    const db = await StorageService.openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(['projects'], 'readonly');
+        const store = tx.objectStore('projects');
+        const req = store.getAll();
+        req.onsuccess = () => {
+            const projects = req.result.map(proj => ({
+                username: proj.username,
+                lastSaved: proj.lastSaved,
+                pagesCount: Object.keys(proj.pages || {}).length,
+                scriptsCount: Object.keys(proj.scripts || {}).length,
+                data: proj
+            }));
+            resolve(projects);
+        };
+        req.onerror = () => reject(req.error);
+    });
+};
+
+// Chat functions
+StorageService.prototype.saveMessage = async function(conversation, senderUsername, message) {
+    if (!this.db) return false;
+    
+    // Create conversation ID (sorted usernames to ensure uniqueness)
+    const participants = [this.username, conversation].sort();
+    const convId = participants.join('_');
+    
+    return new Promise((resolve) => {
+        const tx = this.db.transaction(['messages'], 'readwrite');
+        const store = tx.objectStore('messages');
+        
+        const msg = {
+            conversationId: convId,
+            sender: senderUsername,
+            text: message,
+            timestamp: new Date().toISOString()
+        };
+        
+        const req = store.add(msg);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+    });
+};
+
+StorageService.prototype.getMessages = async function(otherUsername) {
+    if (!this.db) return [];
+    
+    const participants = [this.username, otherUsername].sort();
+    const convId = participants.join('_');
+    
+    return new Promise((resolve) => {
+        const tx = this.db.transaction(['messages'], 'readonly');
+        const store = tx.objectStore('messages');
+        const req = store.getAll();
+        
+        req.onsuccess = () => {
+            const msgs = req.result
+                .filter(m => m.conversationId === convId)
+                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            resolve(msgs);
+        };
+        req.onerror = () => resolve([]);
+    });
+};
+
+StorageService.prototype.getConversations = async function() {
+    if (!this.db) return [];
+    
+    return new Promise((resolve) => {
+        const tx = this.db.transaction(['messages'], 'readonly');
+        const store = tx.objectStore('messages');
+        const req = store.getAll();
+        
+        req.onsuccess = () => {
+            const convMap = {};
+            req.result.forEach(msg => {
+                const parts = msg.conversationId.split('_');
+                const otherUser = parts[0] === this.username ? parts[1] : parts[0];
+                
+                if (!convMap[msg.conversationId]) {
+                    convMap[msg.conversationId] = {
+                        conversationId: msg.conversationId,
+                        otherUser,
+                        lastMessage: msg.text,
+                        lastTimestamp: msg.timestamp,
+                        messageCount: 0
+                    };
+                }
+                convMap[msg.conversationId].messageCount++;
+                convMap[msg.conversationId].lastTimestamp = msg.timestamp;
+                convMap[msg.conversationId].lastMessage = msg.text;
+            });
+            
+            resolve(Object.values(convMap).sort((a, b) => 
+                new Date(b.lastTimestamp) - new Date(a.lastTimestamp)
+            ));
+        };
+        req.onerror = () => resolve([]);
+    });
+};
+
+StorageService.getAllConversations = async function() {
+    const db = await StorageService.openDB();
+    return new Promise((resolve) => {
+        const tx = db.transaction(['messages'], 'readonly');
+        const store = tx.objectStore('messages');
+        const req = store.getAll();
+        
+        req.onsuccess = () => {
+            const convMap = {};
+            req.result.forEach(msg => {
+                if (!convMap[msg.conversationId]) {
+                    const parts = msg.conversationId.split('_');
+                    convMap[msg.conversationId] = {
+                        conversationId: msg.conversationId,
+                        participants: parts,
+                        messageCount: 0,
+                        messages: []
+                    };
+                }
+                convMap[msg.conversationId].messageCount++;
+                convMap[msg.conversationId].messages.push({
+                    sender: msg.sender,
+                    text: msg.text,
+                    timestamp: msg.timestamp
+                });
+            });
+            
+            resolve(Object.values(convMap));
+        };
+        req.onerror = () => resolve([]);
+    });
 };
